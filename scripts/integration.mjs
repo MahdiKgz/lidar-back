@@ -75,7 +75,8 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
       MINIO_REGION: 'us-east-1',
       MINIO_BUCKET: 'lidar-test',
       MINIO_CONFIGURE_BUCKET: 'false',
-      PROCESSING_WORKER_ENABLED: 'false',
+      PROCESSING_WORKER_ENABLED:
+        process.env.INTEGRATION_PROCESSING === '1' ? 'true' : 'false',
     };
     const result = spawnSync(process.execPath, [import.meta.filename], {
       env,
@@ -110,7 +111,27 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
   const { ApiExceptionFilter } =
     await import('../dist/common/api-exception.filter.js');
   const assert = (await import('node:assert/strict')).default;
-  const app = await NestFactory.create(AppModule, { logger: ['error'] });
+  let app;
+  if (process.env.INTEGRATION_PROCESSING === '1') {
+    const { Test } = await import('@nestjs/testing');
+    const { PdalService } = await import('../dist/proccessing/pdal.service.js');
+    const { writeFile } = await import('node:fs/promises');
+    const { join } = await import('node:path');
+    const inspection = {
+      summary: { summary: { num_points: 5, srs: { wkt: 'EPSG:4326' } } },
+      metadata: {},
+    };
+    const module = await Test.createTestingModule({ imports: [AppModule] })
+      .overrideProvider(PdalService)
+      .useValue({
+        inspect: async () => inspection,
+        convertToCopc: async (dir, _input, output) =>
+          writeFile(join(dir, output), 'LASF-test-output'),
+        verifyCopc: async () => inspection,
+      })
+      .compile();
+    app = module.createNestApplication({ logger: ['error'] });
+  } else app = await NestFactory.create(AppModule, { logger: ['error'] });
   app.setGlobalPrefix('api/v1');
   app.useGlobalPipes(
     new ValidationPipe({
@@ -163,6 +184,8 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
     assert.equal(parts.uploadedParts.length, upload.totalParts);
     assert.ok(parts.uploadedParts.every((p) => p.valid));
     await api(`/uploads/${upload.uploadSessionId}/complete`, 'POST');
+    if (process.env.INTEGRATION_PROCESSING === '1')
+      await new Promise((resolve) => setTimeout(resolve, 1500));
     await api(`/uploads/${upload.uploadSessionId}/complete`, 'POST');
     const download = await api(`/datasets/${upload.datasetId}/download`);
     const range = await fetch(download.url, {
@@ -179,12 +202,27 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
     const list = await api('/datasets?page=1&limit=1&search=integration');
     assert.equal(list.total, 1);
     await api(`/datasets/${upload.datasetId}/status`);
-    await api(`/datasets/${upload.datasetId}/requeue`, 'POST');
+    if (process.env.INTEGRATION_PROCESSING === '1') {
+      for (let i = 0; ; i++) {
+        const result = await api(`/datasets/${upload.datasetId}/status`);
+        if (result.status === 'READY') break;
+        if (i > 50 || result.status === 'FAILED')
+          throw new Error('Worker did not reach READY.');
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      const copc = await api(`/datasets/${upload.datasetId}/copc`);
+      const result = await fetch(copc.url, { headers: { Range: 'bytes=0-3' } });
+      assert.equal(result.status, 206);
+      assert.equal(await result.text(), 'LASF');
+      console.log(
+        'Real BullMQ worker → streamed MinIO files → metadata → READY → COPC Range passed (PDAL mocked, not installed).',
+      );
+    } else await api(`/datasets/${upload.datasetId}/requeue`, 'POST');
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     assert.equal((await api('/datasets')).total, 0);
     console.log(
-      `Infrastructure integration passed: migrations, ${size} byte multipart/resume/duplicate complete, queue, list/status/requeue, Range download, idempotent delete. PDAL disabled.`,
+      `Infrastructure integration passed: migrations, ${size} byte multipart/resume/duplicate complete, queue, list/status/requeue, Range download, idempotent delete. PDAL execution disabled (mocked in worker mode).`,
     );
   } finally {
     await app.close();

@@ -93,3 +93,7 @@ These tests **do not prove real conversion or full infrastructure integration**.
 ## Known follow-up work
 
 See [docs/backend-processing-audit.md](docs/backend-processing-audit.md). B1 upload concurrency/completion recovery/expiration, B2 Redis enqueue recovery/requeue, B5 Dataset APIs and B6 infrastructure integration remain separate roadmap work. A completed upload whose enqueue failed is not recovered automatically yet.
+
+## Company smoke-test handoff
+
+Follow [docs/company-smoke-test.md](docs/company-smoke-test.md) for the installed native PDAL runtime, migrations, API/worker startup, frontend CORS and the real-file smoke command. `pnpm test:smoke /absolute/file.laz` streams that file and waits for actual PDAL conversion and READY; it does not install PDAL. `pnpm test:worker-integration` checks the real BullMQ/PostgreSQL/MinIO worker lifecycle with only PDAL mocked and isolated temporary infrastructure.

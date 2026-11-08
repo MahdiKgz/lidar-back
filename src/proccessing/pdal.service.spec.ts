@@ -111,3 +111,30 @@ describe('PdalService COPC verification', () => {
     ).rejects.toThrow('filename');
   });
 });
+
+describe('Native company runtime', () => {
+  it('uses the installed pdal executable with no Docker dependency', async () => {
+    vi.stubEnv('PDAL_MODE', 'native');
+    execution.run
+      .mockReset()
+      .mockImplementation(async (_command: string, args: string[]) => ({
+        stdout: args.includes('--version')
+          ? 'PDAL 2.9.0'
+          : 'readers.las writers.copc',
+      }));
+    try {
+      expect(await new PdalService().verifyRuntime('/tmp')).toEqual({
+        version: 'PDAL 2.9.0',
+      });
+      expect(execution.run.mock.calls.every((call) => call[0] === 'pdal')).toBe(
+        true,
+      );
+      expect(execution.run.mock.calls[0][2]).toMatchObject({
+        cwd: '/tmp',
+        timeout: 3600000,
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

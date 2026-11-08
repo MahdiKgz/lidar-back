@@ -240,6 +240,19 @@ export class UploadService {
   }
 
   async completeUpload(id: string) {
+    const existing = await this.uploadSessionRepository.findOne({
+      where: { id },
+      relations: { dataset: true },
+    });
+    if (existing?.status === UploadSessionStatus.COMPLETED) {
+      if (existing.dataset.status === DatasetStatus.DELETING)
+        throw new ConflictException('Dataset is being deleted.');
+      return this.completeResponse({
+        datasetId: existing.dataset.id,
+        uploadSessionId: id,
+        objectKey: existing.objectKey,
+      });
+    }
     const completed = await this.withSession(id, async (session, manager) => {
       if (
         !ACTIVE.includes(session.status) &&
@@ -311,6 +324,14 @@ export class UploadService {
         objectKey: session.objectKey,
       };
     });
+    return this.completeResponse(completed);
+  }
+
+  private async completeResponse(completed: {
+    datasetId: string;
+    uploadSessionId: string;
+    objectKey: string;
+  }) {
     let processingEnqueuePending = false;
     try {
       await this.processingService.dispatchPending(completed.datasetId);
@@ -327,7 +348,13 @@ export class UploadService {
       ...completed,
       status: dataset.status,
       processingJobId: `dataset-${dataset.id}`,
-      processingEnqueuePending,
+      processingEnqueuePending:
+        processingEnqueuePending &&
+        ![
+          DatasetStatus.PROCESSING,
+          DatasetStatus.READY,
+          DatasetStatus.FAILED,
+        ].includes(dataset.status),
     };
   }
 
