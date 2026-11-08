@@ -1,132 +1,95 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# Current backend status (2026-11-08)
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The upload and Dataset APIs are implemented and documented in `docs/openapi.json`. Swagger UI is `/api/v1/docs`. The sections below retain the initial processing audit context; this status supersedes their old follow-up list.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Implemented Dataset endpoints: GET `/datasets`, `/:id`, `/:id/status`, `/:id/download`, `/:id/copc`; POST `/:id/requeue`; DELETE `/:id`. Lists support page/limit, status, format, literal filename search, allowlisted sorting and stable UUID tie-breaking. Downloads expire after five minutes.
 
-## Description
+Upload mutations and deletion use the same PostgreSQL advisory lock as processing. Complete validates part numbers, ETags and exact sizes and recovers storage completion after DB commit failure. Resume returns actual sizes and a `valid` flag. Expiration cleanup runs every 30 seconds. Bucket lifecycle configuration covers orphan multipart uploads when supported/enabled.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+Processing reconciliation runs every 15 seconds. UPLOADED is the durable enqueue intent, so Redis failures return `processingEnqueuePending` and are retried. Retained failed jobs are retried through explicit requeue with reset attempt counters. Deletion persists DELETING before external cleanup; a 30-second reconciler retries partial failures. This adds a status value to the existing varchar column without changing its schema. The new migration indexes active upload expiration and is applied by integration tests.
 
-## Project setup
+`pnpm test:integration` uses temporary isolated Docker containers with locally available images and cleans them up. `pnpm test:large-upload` runs the same flow with 671,811,028 synthetic bytes (41 parts), without PDAL. It verifies migrations, real upload/storage, duplicate complete, Redis enqueue, Dataset API, Range access and deletion. No existing databases/buckets are used. No images are pulled. For an existing PDAL runtime, `pnpm pdal:check` checks version and drivers without installing anything.
+
+`PDAL_MODE=native` runs an already installed `pdal` binary. `PDAL_MODE=docker` uses a local image with pulls disabled. `PROCESSING_WORKER_ENABLED=false` disables job consumption on API instances; `pnpm start:worker` starts the application context without HTTP. Set worker concurrency with `PROCESSING_CONCURRENCY` (default 1). For production, provide a worker environment with Node and PDAL installed and use native mode, without a Docker socket. That deployment image and real PDAL execution have not been validated here.
+
+Compose infrastructure now uses pinned image digests and community MinIO, which does not require the old license file. Review storage volumes before changing an existing deployment. MinIO browser origins are set by `MINIO_API_CORS_ALLOW_ORIGIN`. Optional `MINIO_CONFIGURE_BUCKET=true` applies S3 bucket CORS and orphan-upload lifecycle rules for services that support those APIs; otherwise configure lifecycle with your storage administrator. The default is false.
+
+Remaining acceptance checks: real LAS and LAZ conversion, corrupted/unknown-CRS runtime fixtures, full upload-to-READY integration with PDAL, real browser CORS verification, Redis outage/restart and multi-instance stress testing. The large-file transfer test passed; it does not certify COPC conversion. No PDAL installation was performed in this continuation.
+
+---
+
+# LiDAR Backend
+
+NestJS 12 / TypeScript ESM backend using PostgreSQL (TypeORM migrations), MinIO (S3), Redis / BullMQ and a Docker-based PDAL integration. This repository contains no frontend implementation.
+
+## Setup
 
 ```bash
-$ pnpm install
+pnpm install --frozen-lockfile
+cp .env.example .env
+# Configure database, storage and Redis values in .env.
+pnpm build
+pnpm typeorm migration:run -d src/database/data-source.ts
+pnpm start:dev
 ```
 
-## Compile and run the project
+For production, `pnpm build && pnpm start:prod`. `synchronize` is disabled. No schema changes or new migrations were needed for this processing step.
+
+The existing `infra/docker/compose.yaml` is a development starting point. Its MinIO service requires a separately supplied license file. It uses mutable image tags and is not a reproducible production deployment yet. Do not point development tests at production infrastructure.
+
+## Swagger and API contract
+
+With the default `API_PREFIX=api/v1` and port 3000:
+
+- Swagger UI: `http://localhost:3000/api/v1/docs`
+- OpenAPI JSON: `http://localhost:3000/api/v1/openapi.json`
+- Committed contract: [docs/openapi.json](docs/openapi.json)
+- Regenerate without infrastructure: `pnpm docs:generate`
+
+| Method | Path (under `/api/v1`) | Purpose |
+| --- | --- | --- |
+| POST | `/uploads/initiate` | Create dataset and multipart upload |
+| POST | `/uploads/:uploadSessionId/parts/presign` | Sign selected parts |
+| GET | `/uploads/:uploadSessionId/parts` | List uploaded parts for resume |
+| POST | `/uploads/:uploadSessionId/complete` | Complete upload and enqueue processing |
+| DELETE | `/uploads/:uploadSessionId` | Abort upload |
+
+The Dataset controller still contains generated scaffolding and is excluded from Swagger until B5. Those routes must not be treated as an implemented API.
+
+Upload binary parts directly to MinIO using the presigned PUT URLs. Files must be LAS/LAZ and at most 1 GiB; parts are 16 MiB except the final part. Each presign request accepts at most 100 distinct part numbers. Presigned URLs last 900 seconds and sessions last 24 hours. The API never proxies the original file. `fileSize` in responses is a decimal string for PostgreSQL `bigint` compatibility.
+
+Browser uploads require MinIO to allow the browser origin, PUT and appropriate request headers and expose `ETag`. COPC viewers will also need GET/HEAD and Range access. The API's CORS configuration does not configure MinIO; browser CORS / Range verification remains in B1/B5.
+
+## Processing
+
+`complete` enqueues `process-dataset` on `lidar-processing` with a stable dataset job ID, three attempts, exponential backoff (5 seconds), and bounded retention. The registered `WorkerHost` uses concurrency 1 per process and a PostgreSQL session advisory lock per dataset. The lock holds one database connection throughout processing, so leave database pool capacity for repository operations and other requests.
+
+The worker streams the original to an isolated temporary directory, verifies its size, inspects it, converts it to COPC, checks the LAS 1.4 COPC info VLR, re-inspects it and compares point counts. It uploads the output to `datasets/{id}/processed/cloud.copc.laz` and checks the stored size before committing `metadata.lidar` and `READY` together. Metadata keeps both inspections, the output key, size and processing timestamp.
+
+A dataset already marked READY is skipped on redelivery. Retries overwrite the same output key; a valid object uploaded before a database failure can safely be replaced by a subsequent attempt. Failures before the final attempt return the status to QUEUED; final failures set FAILED and a sanitized stage error. Temporary files are removed in success and failure paths. Failed cleanup emits a warning for operator follow-up.
+
+### PDAL runtime (not installed by this task)
+
+The existing integration expects Docker on a Linux development host and a **locally available** PDAL image containing `readers.las` and `writers.copc`. `PDAL_DOCKER_IMAGE` selects it; the default and example pin the PDAL 2.9.0 amd64 manifest by digest. No install/pull commands are part of application setup. Runtime uses `--pull=never` and `--network=none`, the host UID/GID and a workspace bind mount. Set the variable to your existing local image as needed. Other architectures need their own compatible pinned image.
+
+PDAL calls use `execFile` without a shell, a one-hour timeout and a 20 MiB output buffer. Named containers are removed after execution, including CLI timeout failures. File paths are restricted to filenames inside the workspace. Empty point clouds and unknown CRS are rejected instead of guessing a projection. The workspace must be accessible to the local Docker daemon; remote Docker daemons are unsupported by this development mode.
+
+A dedicated worker image with Node and native PDAL remains deployment work. This development integration is not a reason to expose the Docker socket to a production application.
+
+## Verification
 
 ```bash
-# development
-$ pnpm run start
-
-# watch mode
-$ pnpm run start:dev
-
-# production mode
-$ pnpm run start:prod
+pnpm build
+pnpm lint
+pnpm test
+pnpm test:e2e
+pnpm docs:generate
 ```
 
-## Run tests
+Unit tests cover processing success, duplicate delivery, advisory-lock contention, size and point-count failures, retry after metadata failure, final failure, workspace cleanup, COPC header checks, PDAL command options/timeouts/cleanup (mocked), and streaming storage. HTTP tests exercise compiled controller/DTO metadata, validation and Swagger using mocked services. They build first and require no PostgreSQL, Redis, MinIO, Docker or PDAL execution.
 
-```bash
-# unit tests
-$ pnpm run test
+These tests **do not prove real conversion or full infrastructure integration**. LAS/LAZ conversion, full upload-to-READY integration, and the 640 MiB case remain to be run against an existing prepared environment.
 
-# e2e tests
-$ pnpm run test:e2e
+## Known follow-up work
 
-# test coverage
-$ pnpm run test:cov
-```
-
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ pnpm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
-
-```bash
-$ npx @nestjs/observe link
-```
-
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
-
-Or do it by hand:
-
-```bash
-$ pnpm install @nestjs/observe
-```
-
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+See [docs/backend-processing-audit.md](docs/backend-processing-audit.md). B1 upload concurrency/completion recovery/expiration, B2 Redis enqueue recovery/requeue, B5 Dataset APIs and B6 infrastructure integration remain separate roadmap work. A completed upload whose enqueue failed is not recovered automatically yet.

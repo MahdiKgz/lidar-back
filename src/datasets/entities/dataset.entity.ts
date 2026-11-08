@@ -17,6 +17,7 @@ export enum DatasetStatus {
   PROCESSING = 'PROCESSING',
   READY = 'READY',
   FAILED = 'FAILED',
+  DELETING = 'DELETING',
 }
 
 export enum DatasetFormat {

@@ -1,20 +1,15 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { DatasetsController } from './datasets.controller.js';
-import { DatasetsService } from './datasets.service.js';
+import type { DatasetsService } from './datasets.service.js';
 
 describe('DatasetsController', () => {
-  let controller: DatasetsController;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [DatasetsController],
-      providers: [DatasetsService],
-    }).compile();
-
-    controller = module.get<DatasetsController>(DatasetsController);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('passes UUID strings without numeric conversion', async () => {
+    const service = { findOne: vi.fn() };
+    const controller = new DatasetsController(
+      service as unknown as DatasetsService,
+    );
+    await controller.findOne('3a2c0001-47d1-47bb-b4eb-439082f3424c');
+    expect(service.findOne).toHaveBeenCalledWith(
+      '3a2c0001-47d1-47bb-b4eb-439082f3424c',
+    );
   });
 });

@@ -6,6 +6,9 @@ import {
   S3Client,
   CreateBucketCommand,
   HeadBucketCommand,
+  PutBucketCorsCommand,
+  PutBucketLifecycleConfigurationCommand,
+  PutObjectCommand,
   CreateMultipartUploadCommand,
   UploadPartCommand,
   ListPartsCommand,
@@ -14,8 +17,14 @@ import {
   GetObjectCommand,
   DeleteObjectCommand,
   type CompletedPart,
+  type Part,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
+
+import { createReadStream, createWriteStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -64,42 +73,81 @@ export class StorageService implements OnModuleInit {
 
   async onModuleInit(): Promise<void> {
     await this.ensureBucket();
+    if (this.configService.get<boolean>('storage.configureBucket', false)) {
+      await this.configureBucket();
+    }
   }
 
-  // Check and create bucket if it does not exist.
+  private isMissing(error: unknown, code: string): boolean {
+    const details = error as {
+      name?: string;
+      $metadata?: { httpStatusCode?: number };
+    };
+    return (
+      details.name === code ||
+      (code !== 'NoSuchUpload' && details.$metadata?.httpStatusCode === 404)
+    );
+  }
+
   async ensureBucket(): Promise<void> {
     try {
-      await this.client.send(
-        new CreateBucketCommand({
-          Bucket: this.bucket,
-        }),
-      );
-
-      this.logger.log(`Bucket "${this.bucket}" created successfully.`);
+      await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
     } catch (error) {
-      const details = error as {
-        name?: string;
-        Code?: string;
-        $metadata?: {
-          httpStatusCode?: number;
-        };
-      };
-
-      const errorCode = details.name ?? details.Code;
-
-      if (errorCode === 'BucketAlreadyOwnedByYou') {
-        this.logger.log(`Bucket "${this.bucket}" already exists.`);
-
-        return;
+      if (!this.isMissing(error, 'NotFound')) throw error;
+      try {
+        await this.client.send(
+          new CreateBucketCommand({ Bucket: this.bucket }),
+        );
+      } catch (createError) {
+        if (
+          (createError as { name?: string }).name !== 'BucketAlreadyOwnedByYou'
+        )
+          throw createError;
       }
-
-      this.logger.error(`Failed to initialize bucket "${this.bucket}".`, {
-        errorCode,
-        statusCode: details.$metadata?.httpStatusCode,
-      } as any);
-
-      throw error;
     }
+  }
+
+  async configureBucket(): Promise<void> {
+    await this.client.send(
+      new PutBucketCorsCommand({
+        Bucket: this.bucket,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedOrigins: this.configService.get<string[]>(
+                'app.corsOrigin',
+                ['http://localhost:5173'],
+              ),
+              AllowedMethods: ['GET', 'HEAD', 'PUT'],
+              AllowedHeaders: ['*'],
+              ExposeHeaders: [
+                'ETag',
+                'Content-Length',
+                'Content-Range',
+                'Accept-Ranges',
+              ],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      }),
+    );
+    // Also covers orphaned uploads created just before a process/DB failure.
+    await this.client.send(
+      new PutBucketLifecycleConfigurationCommand({
+        Bucket: this.bucket,
+        LifecycleConfiguration: {
+          Rules: [
+            {
+              ID: 'abort-abandoned-multipart',
+              Status: 'Enabled',
+              Filter: { Prefix: 'datasets/' },
+              AbortIncompleteMultipartUpload: { DaysAfterInitiation: 2 },
+            },
+          ],
+        },
+      }),
+    );
   }
 
   // Start Multipart Upload.
@@ -147,8 +195,8 @@ export class StorageService implements OnModuleInit {
   async listUploadedParts(
     objectKey: string,
     uploadId: string,
-  ): Promise<CompletedPart[]> {
-    const parts: CompletedPart[] = [];
+  ): Promise<Part[]> {
+    const parts: Part[] = [];
 
     let marker: string | undefined;
 
@@ -167,6 +215,7 @@ export class StorageService implements OnModuleInit {
           parts.push({
             PartNumber: part.PartNumber,
             ETag: part.ETag,
+            Size: part.Size,
           });
         }
       }
@@ -175,7 +224,10 @@ export class StorageService implements OnModuleInit {
         break;
       }
 
-      if (result.NextPartNumberMarker === undefined) {
+      if (
+        result.NextPartNumberMarker === undefined ||
+        result.NextPartNumberMarker === marker
+      ) {
         throw new Error('Invalid multipart pagination response.');
       }
 
@@ -189,6 +241,8 @@ export class StorageService implements OnModuleInit {
     objectKey: string,
     uploadId: string,
     expectedPartCount: number,
+    expectedFileSize?: number,
+    partSize?: number,
   ): Promise<string | undefined> {
     const parts = await this.listUploadedParts(objectKey, uploadId);
 
@@ -199,18 +253,32 @@ export class StorageService implements OnModuleInit {
     }
 
     for (let i = 0; i < expectedPartCount; i++) {
-      if (parts[i].PartNumber !== i + 1) {
+      if (!parts[i].ETag?.trim() || parts[i].PartNumber !== i + 1) {
         throw new Error(`Missing multipart part ${i + 1}.`);
       }
     }
 
+    if (expectedFileSize !== undefined && partSize !== undefined) {
+      for (let i = 0; i < parts.length; i++) {
+        const expectedSize = Math.min(
+          partSize,
+          expectedFileSize - i * partSize,
+        );
+        if (parts[i].Size !== expectedSize) {
+          throw new Error(`Invalid size for part ${i + 1}.`);
+        }
+      }
+    }
+    const completedParts: CompletedPart[] = parts.map(
+      ({ PartNumber, ETag }) => ({ PartNumber, ETag }),
+    );
     const result = await this.client.send(
       new CompleteMultipartUploadCommand({
         Bucket: this.bucket,
         Key: objectKey,
         UploadId: uploadId,
         MultipartUpload: {
-          Parts: parts,
+          Parts: completedParts,
         },
       }),
     );
@@ -223,13 +291,30 @@ export class StorageService implements OnModuleInit {
     objectKey: string,
     uploadId: string,
   ): Promise<void> {
-    await this.client.send(
-      new AbortMultipartUploadCommand({
-        Bucket: this.bucket,
-        Key: objectKey,
-        UploadId: uploadId,
-      }),
-    );
+    try {
+      await this.client.send(
+        new AbortMultipartUploadCommand({
+          Bucket: this.bucket,
+          Key: objectKey,
+          UploadId: uploadId,
+        }),
+      );
+    } catch (error) {
+      if (!this.isMissing(error, 'NoSuchUpload')) throw error;
+    }
+  }
+
+  async findObjectSize(objectKey: string): Promise<number | null> {
+    try {
+      return await this.getObjectSize(objectKey);
+    } catch (error) {
+      if (
+        this.isMissing(error, 'NotFound') ||
+        this.isMissing(error, 'NoSuchKey')
+      )
+        return null;
+      throw error;
+    }
   }
 
   async getObjectSize(objectKey: string): Promise<number> {
@@ -257,6 +342,37 @@ export class StorageService implements OnModuleInit {
     });
 
     return getSignedUrl(this.presignClient, command, { expiresIn });
+  }
+
+  async downloadToFile(objectKey: string, destination: string): Promise<void> {
+    const result = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: objectKey }),
+    );
+    if (!(result.Body instanceof Readable)) {
+      throw new Error('Storage did not return a readable object stream.');
+    }
+    await pipeline(
+      result.Body,
+      createWriteStream(destination, { flags: 'wx' }),
+    );
+  }
+
+  async uploadFromFile(objectKey: string, source: string): Promise<void> {
+    const { size } = await stat(source);
+    const body = createReadStream(source);
+    try {
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: objectKey,
+          Body: body,
+          ContentLength: size,
+          ContentType: 'application/octet-stream',
+        }),
+      );
+    } finally {
+      body.destroy();
+    }
   }
 
   // Delete an object.

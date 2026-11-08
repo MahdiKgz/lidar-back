@@ -9,4 +9,5 @@ export default registerAs('storage', () => ({
 
   region: process.env.MINIO_REGION,
   bucket: process.env.MINIO_BUCKET,
+  configureBucket: process.env.MINIO_CONFIGURE_BUCKET === 'true',
 }));

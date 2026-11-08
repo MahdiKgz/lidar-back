@@ -1,0 +1,1304 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/v1/uploads/initiate": {
+      "post": {
+        "operationId": "UploadsController_initiateUpload",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateUploadDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InitiateUploadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or UUID."
+          },
+          "404": {
+            "description": "Upload session not found."
+          },
+          "409": {
+            "description": "Session state conflict or uploaded size mismatch."
+          },
+          "410": {
+            "description": "Upload session expired."
+          }
+        },
+        "summary": "Create a dataset and multipart upload session",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{uploadSessionId}/parts/presign": {
+      "post": {
+        "operationId": "UploadsController_generatePartUrls",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresignPartsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PresignPartsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or UUID."
+          },
+          "404": {
+            "description": "Upload session not found."
+          },
+          "409": {
+            "description": "Session state conflict or uploaded size mismatch."
+          },
+          "410": {
+            "description": "Upload session expired."
+          }
+        },
+        "summary": "Get presigned binary PUT URLs for selected parts",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{uploadSessionId}/parts": {
+      "get": {
+        "operationId": "UploadsController_getUploadedParts",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadedPartsResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or UUID."
+          },
+          "404": {
+            "description": "Upload session not found."
+          },
+          "409": {
+            "description": "Session state conflict or uploaded size mismatch."
+          },
+          "410": {
+            "description": "Upload session expired."
+          }
+        },
+        "summary": "List uploaded parts for resume",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{uploadSessionId}/complete": {
+      "post": {
+        "operationId": "UploadsController_completeUpload",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CompleteUploadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or UUID."
+          },
+          "404": {
+            "description": "Upload session not found."
+          },
+          "409": {
+            "description": "Session state conflict or uploaded size mismatch."
+          },
+          "410": {
+            "description": "Upload session expired."
+          }
+        },
+        "summary": "Verify and complete multipart upload, then enqueue processing",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/api/v1/uploads/{uploadSessionId}": {
+      "delete": {
+        "operationId": "UploadsController_abortUpload",
+        "parameters": [
+          {
+            "name": "uploadSessionId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AbortUploadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or UUID."
+          },
+          "404": {
+            "description": "Upload session not found."
+          },
+          "409": {
+            "description": "Session state conflict or uploaded size mismatch."
+          },
+          "410": {
+            "description": "Upload session expired."
+          }
+        },
+        "summary": "Abort an incomplete upload",
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/api/v1/datasets": {
+      "get": {
+        "operationId": "DatasetsController_findAll",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "default": 1,
+              "type": "number"
+            }
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "minimum": 1,
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
+            }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "UPLOADING",
+                "UPLOADED",
+                "QUEUED",
+                "PROCESSING",
+                "READY",
+                "FAILED",
+                "DELETING"
+              ]
+            }
+          },
+          {
+            "name": "format",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "LAS",
+                "LAZ",
+                "COPC"
+              ]
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "description": "Case-insensitive literal filename search.",
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          },
+          {
+            "name": "sortBy",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "createdAt",
+              "type": "string",
+              "enum": [
+                "createdAt",
+                "updatedAt",
+                "originalFilename",
+                "fileSize"
+              ]
+            }
+          },
+          {
+            "name": "sortOrder",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "default": "DESC",
+              "type": "string",
+              "enum": [
+                "ASC",
+                "DESC"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetListResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "List datasets with pagination, sorting and filters",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{id}": {
+      "get": {
+        "operationId": "DatasetsController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get dataset details and LiDAR metadata",
+        "tags": [
+          "Datasets"
+        ]
+      },
+      "delete": {
+        "description": "Idempotent: missing datasets return 204. Storage/Redis failures leave DELETING persisted; background cleanup retries automatically.",
+        "operationId": "DatasetsController_remove",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Dataset and associated objects removed (or already absent)."
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Delete a dataset and its uploads/objects",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{id}/status": {
+      "get": {
+        "operationId": "DatasetsController_status",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetStatusResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get dataset status, job progress and final error",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{id}/download": {
+      "get": {
+        "operationId": "DatasetsController_download",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetDownloadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a five-minute download URL for the original file",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{id}/copc": {
+      "get": {
+        "operationId": "DatasetsController_copc",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetDownloadResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get a five-minute Range-capable URL for verified COPC",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    },
+    "/api/v1/datasets/{id}/requeue": {
+      "post": {
+        "operationId": "DatasetsController_requeue",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RequeueResponseDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid UUID or list query.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset or object not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Dataset is busy or not in the required state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiErrorDto"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Request processing again for an uploaded, queued or failed dataset",
+        "tags": [
+          "Datasets"
+        ]
+      }
+    }
+  },
+  "info": {
+    "title": "LiDAR Backend API",
+    "description": "Upload LAS/LAZ files directly to MinIO using multipart presigned URLs. 1. Initiate. 2. Presign parts. 3. PUT each binary part to its URL. 4. List parts to resume. 5. Complete to enqueue COPC processing. Parts are 16 MiB except the last; maximum file size is 1 GiB. MinIO must allow the browser origin and PUT, and expose ETag. Part URLs expire after 900 seconds; upload sessions after 24 hours. Do not send API JSON headers with binary PUT requests. Use Dataset APIs for metadata, status/progress, short-lived original/COPC download URLs and deletion. POST /datasets/{id}/requeue retries failed processing. Complete returns processingEnqueuePending when Redis is unavailable; reconciliation recovers automatically. Errors contain statusCode, error, message, timestamp and path.",
+    "version": "1.0",
+    "contact": {}
+  },
+  "tags": [],
+  "servers": [],
+  "components": {
+    "schemas": {
+      "InitiateUploadDto": {
+        "type": "object",
+        "properties": {
+          "originalFilename": {
+            "type": "string",
+            "example": "survey.laz",
+            "maxLength": 255,
+            "pattern": "\\.[lL][aA][sSzZ]$"
+          },
+          "fileSize": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1073741824,
+            "example": 671811028,
+            "description": "Size in bytes; maximum 1 GiB."
+          }
+        },
+        "required": [
+          "originalFilename",
+          "fileSize"
+        ]
+      },
+      "InitiateUploadResponseDto": {
+        "type": "object",
+        "properties": {
+          "datasetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadSessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originalFilename": {
+            "type": "string"
+          },
+          "fileSize": {
+            "type": "string",
+            "example": "671811028",
+            "description": "Byte count as a decimal string (PostgreSQL bigint)."
+          },
+          "partSize": {
+            "type": "number",
+            "example": 16777216
+          },
+          "totalParts": {
+            "type": "number",
+            "example": 41
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INITIATED",
+              "UPLOADING",
+              "COMPLETED",
+              "ABORTED",
+              "EXPIRED",
+              "FAILED"
+            ]
+          }
+        },
+        "required": [
+          "datasetId",
+          "uploadSessionId",
+          "originalFilename",
+          "fileSize",
+          "partSize",
+          "totalParts",
+          "expiresAt",
+          "status"
+        ]
+      },
+      "PresignPartsDto": {
+        "type": "object",
+        "properties": {
+          "partNumbers": {
+            "example": [
+              1,
+              2,
+              3
+            ],
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true,
+            "description": "Integer part numbers from 1 to totalParts (at most 10000).",
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "required": [
+          "partNumbers"
+        ]
+      },
+      "PresignedPartDto": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "number",
+            "example": 1
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Temporary URL for a direct binary PUT to MinIO. Never log or persist it."
+          }
+        },
+        "required": [
+          "partNumber",
+          "url"
+        ]
+      },
+      "PresignPartsResponseDto": {
+        "type": "object",
+        "properties": {
+          "uploadSessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 900
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PresignedPartDto"
+            }
+          }
+        },
+        "required": [
+          "uploadSessionId",
+          "expiresIn",
+          "parts"
+        ]
+      },
+      "UploadedPartDto": {
+        "type": "object",
+        "properties": {
+          "size": {
+            "type": "number",
+            "description": "Actual part size in MinIO."
+          },
+          "valid": {
+            "type": "boolean",
+            "description": "Whether this part has the expected byte count; reupload invalid parts."
+          },
+          "partNumber": {
+            "type": "number"
+          },
+          "etag": {
+            "type": "string",
+            "description": "ETag reported by MinIO."
+          }
+        },
+        "required": [
+          "size",
+          "valid",
+          "partNumber",
+          "etag"
+        ]
+      },
+      "UploadedPartsResponseDto": {
+        "type": "object",
+        "properties": {
+          "partSize": {
+            "type": "number"
+          },
+          "totalParts": {
+            "type": "number"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uploadSessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadedParts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UploadedPartDto"
+            }
+          }
+        },
+        "required": [
+          "partSize",
+          "totalParts",
+          "expiresAt",
+          "uploadSessionId",
+          "uploadedParts"
+        ]
+      },
+      "CompleteUploadResponseDto": {
+        "type": "object",
+        "properties": {
+          "datasetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "uploadSessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UPLOADING",
+              "UPLOADED",
+              "QUEUED",
+              "PROCESSING",
+              "READY",
+              "FAILED",
+              "DELETING"
+            ]
+          },
+          "objectKey": {
+            "type": "string"
+          },
+          "processingJobId": {
+            "type": "string",
+            "description": "Deterministic processing job identifier."
+          },
+          "processingEnqueuePending": {
+            "type": "boolean",
+            "description": "True when background reconciliation must retry enqueue."
+          }
+        },
+        "required": [
+          "datasetId",
+          "uploadSessionId",
+          "status",
+          "objectKey",
+          "processingEnqueuePending"
+        ]
+      },
+      "AbortUploadResponseDto": {
+        "type": "object",
+        "properties": {
+          "uploadSessionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INITIATED",
+              "UPLOADING",
+              "COMPLETED",
+              "ABORTED",
+              "EXPIRED",
+              "FAILED"
+            ]
+          }
+        },
+        "required": [
+          "uploadSessionId",
+          "status"
+        ]
+      },
+      "ApiErrorDto": {
+        "type": "object",
+        "properties": {
+          "statusCode": {
+            "type": "number"
+          },
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "statusCode",
+          "error",
+          "message",
+          "timestamp",
+          "path"
+        ]
+      },
+      "DatasetResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originalFilename": {
+            "type": "string"
+          },
+          "fileFormat": {
+            "type": "string",
+            "enum": [
+              "LAS",
+              "LAZ",
+              "COPC"
+            ]
+          },
+          "fileSize": {
+            "type": "string",
+            "description": "Byte count encoded as a decimal bigint string."
+          },
+          "originalObjectKey": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UPLOADING",
+              "UPLOADED",
+              "QUEUED",
+              "PROCESSING",
+              "READY",
+              "FAILED",
+              "DELETING"
+            ],
+            "description": "DELETING persists while storage cleanup is being retried."
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true,
+            "nullable": true,
+            "description": "metadata.lidar contains original summary/metadata and processed COPC summary/metadata, objectKey, fileSize, processedAt."
+          },
+          "processingError": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "originalFilename",
+          "fileFormat",
+          "fileSize",
+          "originalObjectKey",
+          "status",
+          "metadata",
+          "processingError",
+          "createdAt",
+          "updatedAt"
+        ]
+      },
+      "DatasetListResponseDto": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetResponseDto"
+            }
+          },
+          "total": {
+            "type": "number"
+          },
+          "page": {
+            "type": "number"
+          },
+          "limit": {
+            "type": "number"
+          },
+          "totalPages": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "data",
+          "total",
+          "page",
+          "limit",
+          "totalPages"
+        ]
+      },
+      "ProcessingProgressDto": {
+        "type": "object",
+        "properties": {
+          "state": {
+            "type": "string"
+          },
+          "progress": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "attemptsMade": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "state",
+          "progress",
+          "attemptsMade"
+        ]
+      },
+      "DatasetStatusResponseDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UPLOADING",
+              "UPLOADED",
+              "QUEUED",
+              "PROCESSING",
+              "READY",
+              "FAILED",
+              "DELETING"
+            ]
+          },
+          "processingError": {
+            "type": "string",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "processing": {
+            "nullable": true,
+            "type": "object",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ProcessingProgressDto"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "processingError",
+          "updatedAt",
+          "processing"
+        ]
+      },
+      "DatasetDownloadResponseDto": {
+        "type": "object",
+        "properties": {
+          "datasetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Temporary MinIO GET URL. Supports HTTP Range; do not persist or log."
+          },
+          "expiresIn": {
+            "type": "number",
+            "example": 300
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fileSize": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "LAS",
+              "LAZ",
+              "COPC"
+            ]
+          },
+          "rangeRequests": {
+            "type": "boolean",
+            "example": true
+          }
+        },
+        "required": [
+          "datasetId",
+          "url",
+          "expiresIn",
+          "expiresAt",
+          "fileSize",
+          "format",
+          "rangeRequests"
+        ]
+      },
+      "RequeueResponseDto": {
+        "type": "object",
+        "properties": {
+          "datasetId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "UPLOADING",
+              "UPLOADED",
+              "QUEUED",
+              "PROCESSING",
+              "READY",
+              "FAILED",
+              "DELETING"
+            ]
+          },
+          "processingJobId": {
+            "type": "string"
+          },
+          "processingEnqueuePending": {
+            "type": "boolean",
+            "description": "When true the durable DB intent will be retried by reconciliation."
+          }
+        },
+        "required": [
+          "datasetId",
+          "status",
+          "processingJobId",
+          "processingEnqueuePending"
+        ]
+      }
+    }
+  }
+}

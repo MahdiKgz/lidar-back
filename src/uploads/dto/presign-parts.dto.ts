@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
@@ -10,6 +11,14 @@ import {
 import { MAX_PRESIGNED_PARTS_PER_REQUEST } from '../upload.constant.js';
 
 export class PresignPartsDto {
+  @ApiProperty({
+    type: [Number],
+    example: [1, 2, 3],
+    minItems: 1,
+    maxItems: MAX_PRESIGNED_PARTS_PER_REQUEST,
+    uniqueItems: true,
+    description: 'Integer part numbers from 1 to totalParts (at most 10000).',
+  })
   @IsArray()
   @ArrayNotEmpty()
   @ArrayUnique()

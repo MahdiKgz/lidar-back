@@ -1,3 +1,5 @@
+import { ScheduleModule } from '@nestjs/schedule';
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 
 import { UploadsModule } from './uploads/uploads.module.js';
@@ -12,6 +14,20 @@ import storageConfig from './config/storage.config.js';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
+    BullModule.forRootAsync({
+      useFactory: () => ({
+        connection: {
+          host: process.env.REDIS_HOST ?? '127.0.0.1',
+          port: Number(process.env.REDIS_PORT ?? 6379),
+          password: process.env.REDIS_PASSWORD || undefined,
+          db: Number(process.env.REDIS_DB ?? 0),
+          maxRetriesPerRequest: 1,
+          enableOfflineQueue: false,
+          connectTimeout: 3000,
+        },
+      }),
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',

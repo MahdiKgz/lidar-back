@@ -1,3 +1,6 @@
+import { ApiExceptionFilter } from './common/api-exception.filter.js';
+import { ValidationPipe } from '@nestjs/common';
+import { setupSwagger } from './swagger.js';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module.js';
 import { ConfigService } from '@nestjs/config';
@@ -12,12 +15,22 @@ async function bootstrap() {
   app.setGlobalPrefix(apiPrefix);
 
   app.enableCors({
-    origin: configService.get<string[]>('app.corsOrigins', [
+    origin: configService.get<string[]>('app.corsOrigin', [
       'http://localhost:5173',
     ]),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+  app.useGlobalFilters(new ApiExceptionFilter());
+  setupSwagger(app, apiPrefix);
 
   app.enableShutdownHooks();
 

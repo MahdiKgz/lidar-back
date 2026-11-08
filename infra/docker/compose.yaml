@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16@sha256:9e2cf6287f25c3151f4c9421ccce2b17f3e60061c111a29165e0d2cdd9ff0a97
     container_name: lidar-postgres
     restart: unless-stopped
 
@@ -24,13 +24,14 @@ services:
       retries: 10
 
   minio:
-    image: quay.io/minio/aistor/minio:latest
+    image: minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     container_name: lidar-minio
     restart: unless-stopped
 
-    command: server /mnt/data --license /minio.license
+    command: server /mnt/data --console-address :9001
 
     environment:
+      MINIO_API_CORS_ALLOW_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
 
@@ -40,10 +41,9 @@ services:
 
     volumes:
       - minio_data:/mnt/data
-      - ./minio.license:/minio.license:ro
 
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
     container_name: lidar-redis
     restart: unless-stopped
     command: redis-server --appendonly yes
