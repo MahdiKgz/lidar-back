@@ -1,0 +1,9 @@
+export const MAX_UPLOAD_SIZE_BYTES = 1024 * 1024 * 1024;
+
+export const MULTIPART_PART_SIZE_BYTES = 16 * 1024 * 1024;
+
+export const PRESIGNED_URL_EXPIRES_SECONDS = 15 * 60;
+
+export const UPLOAD_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const MAX_PRESIGNED_PARTS_PER_REQUEST = 100;

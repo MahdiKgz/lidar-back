@@ -1,0 +1,11 @@
+.env 
+.env.*
+!.env.example
+
+node_modules/
+dist/
+coverage/
+
+
+infra/docker/minio.license
+infra/docker/minio.license
