@@ -59,3 +59,9 @@ In a browser with WebGL2:
 6. In isolated test infrastructure, interrupt Redis during Complete and confirm processingEnqueuePending and recovery after Redis returns. Do not stop shared company Redis for this test.
 
 A PASS from the CLI proves the actual server conversion path. Browser rendering and browser CORS must also pass before signing off the complete product. Record PDAL version, LAS/LAZ fixture, browser version, dataset ID and observed result; avoid copying signed URLs into reports.
+
+## Docker temporary-directory compatibility
+
+Some Docker installations (including sandboxed/snap daemons) cannot bind-mount the application's `/tmp`. Set `TMPDIR` to an existing absolute directory shared with Docker before running the application/checks, e.g. create `.tmp` inside the checkout and export `TMPDIR="$PWD/.tmp"`. Keep it writable by the Node process. Native PDAL does not need a Docker bind mount.
+
+Real PDAL integration: `pnpm test:pdal-integration` generates a small valid georeferenced LAZ fixture with PDAL and exercises the actual queue/worker/storage/COPC path in disposable infrastructure. Use `FIXTURE_FORMAT=LAS` for LAS. Images must already be local.

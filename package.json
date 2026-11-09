@@ -27,7 +27,8 @@
     "pdal:check": "pnpm build && node scripts/check-pdal.mjs",
     "start:worker": "node dist/worker.js",
     "test:smoke": "node scripts/smoke.mjs",
-    "test:worker-integration": "pnpm build && INTEGRATION_PROCESSING=1 node scripts/integration.mjs"
+    "test:worker-integration": "pnpm build && INTEGRATION_PROCESSING=1 node scripts/integration.mjs",
+    "test:pdal-integration": "pnpm build && REAL_PDAL=1 node scripts/integration.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1164.0",

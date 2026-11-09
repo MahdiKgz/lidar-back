@@ -9,3 +9,4 @@ coverage/
 
 infra/docker/minio.license
 infra/docker/minio.license
+.tmp/

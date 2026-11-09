@@ -1,0 +1,12 @@
+# Local port overrides when other projects already use the defaults.
+services:
+  postgres:
+    ports: !override
+      - '127.0.0.1:15432:5432'
+  redis:
+    ports: !override
+      - '127.0.0.1:26379:6379'
+  minio:
+    ports: !override
+      - '127.0.0.1:29000:9000'
+      - '127.0.0.1:29001:9001'

@@ -70,7 +70,7 @@ A dataset already marked READY is skipped on redelivery. Retries overwrite the s
 
 ### PDAL runtime (not installed by this task)
 
-The existing integration expects Docker on a Linux development host and a **locally available** PDAL image containing `readers.las` and `writers.copc`. `PDAL_DOCKER_IMAGE` selects it; the default and example pin the PDAL 2.9.0 amd64 manifest by digest. No install/pull commands are part of application setup. Runtime uses `--pull=never` and `--network=none`, the host UID/GID and a workspace bind mount. Set the variable to your existing local image as needed. Other architectures need their own compatible pinned image.
+The existing integration expects Docker on a Linux development host and a **locally available** PDAL image containing `readers.las` and `writers.copc`. `PDAL_DOCKER_IMAGE` selects it; the default and example pin the PDAL amd64 manifest by digest. No install/pull commands are part of application setup. Runtime uses `--pull=never` and `--network=none`, the host UID/GID and a workspace bind mount. Set the variable to your existing local image as needed. Other architectures need their own compatible pinned image.
 
 PDAL calls use `execFile` without a shell, a one-hour timeout and a 20 MiB output buffer. Named containers are removed after execution, including CLI timeout failures. File paths are restricted to filenames inside the workspace. Empty point clouds and unknown CRS are rejected instead of guessing a projection. The workspace must be accessible to the local Docker daemon; remote Docker daemons are unsupported by this development mode.
 
@@ -97,3 +97,15 @@ See [docs/backend-processing-audit.md](docs/backend-processing-audit.md). B1 upl
 ## Company smoke-test handoff
 
 Follow [docs/company-smoke-test.md](docs/company-smoke-test.md) for the installed native PDAL runtime, migrations, API/worker startup, frontend CORS and the real-file smoke command. `pnpm test:smoke /absolute/file.laz` streams that file and waits for actual PDAL conversion and READY; it does not install PDAL. `pnpm test:worker-integration` checks the real BullMQ/PostgreSQL/MinIO worker lifecycle with only PDAL mocked and isolated temporary infrastructure.
+
+Real PDAL verification on 2026-11-09 passed for both generated LAS and LAZ through actual BullMQ, MinIO and PostgreSQL to verified COPC/READY. See [the recorded results](docs/real-pdal-test-results.md) for fixture sizes, reproduction and the remaining company/browser acceptance checks. These results supersede earlier statements that all PDAL runtime execution remained unverified.
+
+## Local environment started on 2026-11-09
+
+The ignored backend `.env` was created from `.env.example` with local generated credentials and isolated LiDAR infrastructure. PostgreSQL listens on 15432, Redis on 26379, MinIO on 29000 (console 29001). Start the same infrastructure with:
+
+```bash
+docker compose --env-file .env -p lidar-local -f infra/docker/compose.yaml -f infra/docker/compose.local.yaml up -d --pull never
+```
+
+These ports correspond to `infra/docker/compose.local.yaml`; the base compose file alone uses different default ports. Do not overwrite `.env` after initializing the volumes: database/storage credentials must stay consistent. API remains on localhost:3000/api/v1, and both frontend origins localhost:5173 and localhost:5174 are allowed. All four migrations were applied and API list/Swagger returned HTTP 200. Restart the Node process after changing `.env`; an already-failed watch process may not watch environment files. Only one API process should use port 3000.

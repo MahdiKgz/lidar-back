@@ -75,8 +75,12 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
       MINIO_REGION: 'us-east-1',
       MINIO_BUCKET: 'lidar-test',
       MINIO_CONFIGURE_BUCKET: 'false',
+      ...(process.env.REAL_PDAL === '1' ? { PDAL_MODE: 'docker' } : {}),
       PROCESSING_WORKER_ENABLED:
-        process.env.INTEGRATION_PROCESSING === '1' ? 'true' : 'false',
+        process.env.INTEGRATION_PROCESSING === '1' ||
+        process.env.REAL_PDAL === '1'
+          ? 'true'
+          : 'false',
     };
     const result = spawnSync(process.execPath, [import.meta.filename], {
       env,
@@ -156,9 +160,57 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
       );
       return res.status === 204 ? null : res.json();
     };
-    const size = process.env.LARGE_UPLOAD === '1' ? 671811028 : 16777219;
+    let fixture;
+    const format = process.env.FIXTURE_FORMAT === 'LAS' ? 'las' : 'laz';
+    if (process.env.REAL_PDAL === '1') {
+      const { mkdtemp, writeFile, readFile, rm } =
+        await import('node:fs/promises');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const directory = await mkdtemp(join(tmpdir(), 'lidar-real-fixture-'));
+      try {
+        await writeFile(
+          join(directory, 'generate.json'),
+          JSON.stringify([
+            {
+              type: 'readers.faux',
+              bounds: '([500000,500100],[3500000,3500100],[100,150])',
+              count: 10000,
+              mode: 'ramp',
+            },
+            {
+              type: 'writers.las',
+              filename: `/work/original.${format}`,
+              minor_version: 4,
+              dataformat_id: 6,
+              a_srs: 'EPSG:32640',
+            },
+          ]),
+        );
+        docker(
+          'run',
+          '--rm',
+          '--pull=never',
+          '--network=none',
+          '--mount',
+          `type=bind,source=${directory},target=/work`,
+          '--entrypoint',
+          'pdal',
+          process.env.PDAL_DOCKER_IMAGE ||
+            'ghcr.io/pdal/pdal@sha256:b7f250d102e68e67c2b35fbc63fa18f32ca248d5d42bea61e644a2e030afd6b0',
+          'pipeline',
+          '/work/generate.json',
+        );
+        fixture = await readFile(join(directory, `original.${format}`));
+      } finally {
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+    const size =
+      fixture?.length ??
+      (process.env.LARGE_UPLOAD === '1' ? 671811028 : 16777219);
     const upload = await api('/uploads/initiate', 'POST', {
-      originalFilename: 'integration.laz',
+      originalFilename: `integration.${format}`,
       fileSize: size,
     });
     const numbers = Array.from({ length: upload.totalParts }, (_, i) => i + 1);
@@ -174,7 +226,12 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
       );
       const res = await fetch(part.url, {
         method: 'PUT',
-        body: Buffer.alloc(length, 42),
+        body: fixture
+          ? fixture.subarray(
+              (part.partNumber - 1) * upload.partSize,
+              (part.partNumber - 1) * upload.partSize + length,
+            )
+          : Buffer.alloc(length, 42),
         headers: { Origin: 'http://localhost:5173' },
       });
       assert.ok(res.ok);
@@ -187,6 +244,17 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
     if (process.env.INTEGRATION_PROCESSING === '1')
       await new Promise((resolve) => setTimeout(resolve, 1500));
     await api(`/uploads/${upload.uploadSessionId}/complete`, 'POST');
+    if (process.env.REAL_PDAL === '1') {
+      for (let i = 0; ; i++) {
+        const status = await api(`/datasets/${upload.datasetId}/status`);
+        if (status.status === 'READY') break;
+        if (status.status === 'FAILED' || i > 180)
+          throw new Error(
+            `Real PDAL failed: ${status.processingError || status.status}`,
+          );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
     const download = await api(`/datasets/${upload.datasetId}/download`);
     const range = await fetch(download.url, {
       headers: { Range: 'bytes=0-3' },
@@ -196,13 +264,16 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
     assert.equal(
       await app
         .get(StorageService)
-        .getObjectSize(`datasets/${upload.datasetId}/original.laz`),
+        .getObjectSize(`datasets/${upload.datasetId}/original.${format}`),
       size,
     );
     const list = await api('/datasets?page=1&limit=1&search=integration');
     assert.equal(list.total, 1);
     await api(`/datasets/${upload.datasetId}/status`);
-    if (process.env.INTEGRATION_PROCESSING === '1') {
+    if (
+      process.env.INTEGRATION_PROCESSING === '1' ||
+      process.env.REAL_PDAL === '1'
+    ) {
       for (let i = 0; ; i++) {
         const result = await api(`/datasets/${upload.datasetId}/status`);
         if (result.status === 'READY') break;
@@ -215,14 +286,16 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
       assert.equal(result.status, 206);
       assert.equal(await result.text(), 'LASF');
       console.log(
-        'Real BullMQ worker → streamed MinIO files → metadata → READY → COPC Range passed (PDAL mocked, not installed).',
+        process.env.REAL_PDAL === '1'
+          ? `REAL PDAL ${format.toUpperCase()} → COPC → READY → Range passed.`
+          : 'Real worker passed (PDAL mocked).',
       );
     } else await api(`/datasets/${upload.datasetId}/requeue`, 'POST');
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     assert.equal((await api('/datasets')).total, 0);
     console.log(
-      `Infrastructure integration passed: migrations, ${size} byte multipart/resume/duplicate complete, queue, list/status/requeue, Range download, idempotent delete. PDAL execution disabled (mocked in worker mode).`,
+      `Infrastructure integration passed: migrations, ${size} byte multipart/resume/duplicate complete, queue, list/status/requeue, Range download, idempotent delete. ${process.env.REAL_PDAL === '1' ? 'PDAL real' : 'PDAL disabled/mocked'}.`,
     );
   } finally {
     await app.close();
