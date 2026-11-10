@@ -1,3 +1,6 @@
+import { Observable } from 'rxjs';
+import { DatasetEventsService } from './dataset-events.service.js';
+import { Sse, Header, type MessageEvent } from '@nestjs/common';
 import {
   Controller,
   Delete,
@@ -46,7 +49,10 @@ import {
 })
 @Controller('datasets')
 export class DatasetsController {
-  constructor(private readonly datasetsService: DatasetsService) {}
+  constructor(
+    private readonly datasetsService: DatasetsService,
+    private readonly events: DatasetEventsService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -55,6 +61,21 @@ export class DatasetsController {
   @ApiOkResponse({ type: DatasetListResponseDto })
   findAll(@Query() query: ListDatasetsDto) {
     return this.datasetsService.findAll(query);
+  }
+
+  @Sse('events')
+  @Header('X-Accel-Buffering', 'no')
+  @ApiOperation({
+    summary: 'Live dataset changes and processing progress (SSE)',
+    description:
+      'Events: connected, dataset-created, dataset-updated, dataset-deleted, dataset-progress, sync-required, heartbeat. On each connected/sync-required event refetch the current REST snapshot. Events are not replayed; reconnect resynchronizes from PostgreSQL. No signed URLs or metadata are sent.',
+  })
+  @ApiOkResponse({
+    description: 'Persistent event stream',
+    content: { 'text/event-stream': { schema: { type: 'string' } } },
+  })
+  eventsStream(): Observable<MessageEvent> {
+    return this.events.stream();
   }
 
   @Get(':id')

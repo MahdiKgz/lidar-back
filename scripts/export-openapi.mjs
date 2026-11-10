@@ -1,3 +1,4 @@
+import { DatasetEventsService } from '../dist/datasets/dataset-events.service.js';
 import 'reflect-metadata';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { Module } from '@nestjs/common';
@@ -13,6 +14,7 @@ class DocumentationModule {}
 Module({
   controllers: [UploadsController, DatasetsController],
   providers: [
+    { provide: DatasetEventsService, useValue: {} },
     { provide: UploadService, useValue: {} },
     { provide: DatasetsService, useValue: {} },
   ],

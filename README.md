@@ -109,3 +109,13 @@ docker compose --env-file .env -p lidar-local -f infra/docker/compose.yaml -f in
 ```
 
 These ports correspond to `infra/docker/compose.local.yaml`; the base compose file alone uses different default ports. Do not overwrite `.env` after initializing the volumes: database/storage credentials must stay consistent. API remains on localhost:3000/api/v1, and both frontend origins localhost:5173 and localhost:5174 are allowed. All four migrations were applied and API list/Swagger returned HTTP 200. Restart the Node process after changing `.env`; an already-failed watch process may not watch environment files. Only one API process should use port 3000.
+
+## Server-sent dataset events
+
+`GET /api/v1/datasets/events` is a Nest SSE endpoint. Apply migration `DatasetChangeNotifications1794300000000` before deploying this feature. A PostgreSQL AFTER trigger uses transactional NOTIFY (delivered after commit) for INSERT, meaningful status/error UPDATE, and DELETE. One dedicated LISTEN connection per application process fans these changes out to its SSE subscribers; no per-client database polling is used. BullMQ QueueEvents provides job progress across worker/API processes. Dataset messages exclude metadata and signed URLs. Each client gets a heartbeat every 15 seconds and retry interval of 3 seconds.
+
+Events: `connected`, `dataset-created`, `dataset-updated`, `dataset-deleted`, `dataset-progress`, `sync-required`, `heartbeat`. Clients must refetch REST snapshots on connected/sync-required; the stream has no replay guarantee and does not use Last-Event-ID replay. PostgreSQL listener reconnect broadcasts sync-required. SSE unsubscribe clears heartbeat timers; application shutdown removes listeners and releases the dedicated DB connection. Database pool sizing must account for this listener and processing advisory-lock connections.
+
+For a reverse proxy disable response buffering and compression for this route and allow idle timeouts longer than 15 seconds. X-Accel-Buffering is set to no. Existing API CORS applies to EventSource. This app currently has no authentication; if adding auth, protect the stream as well as REST (EventSource cannot set arbitrary Authorization headers).
+
+Verification: real isolated infrastructure integration asserts stream Content-Type, connection event, committed create/update/delete and BullMQ progress delivery. Frontend tests cover reconnect snapshot requests, direct state/progress events, malformed messages and closing EventSource. Upload byte progress still comes from XHR; server processing progress is a stage milestone.

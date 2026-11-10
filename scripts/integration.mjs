@@ -206,6 +206,16 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
         await rm(directory, { recursive: true, force: true });
       }
     }
+    const streamAbort = new AbortController();
+    const streamResponse = await fetch(`${base}/datasets/events`, { signal: streamAbort.signal });
+    assert.equal(streamResponse.status, 200);
+    assert.ok(streamResponse.headers.get('content-type').includes('text/event-stream'));
+    const frames = [];
+    const consume = (async () => {
+      const reader = streamResponse.body.getReader(); const decoder = new TextDecoder(); let text = '';
+      try { while (true) { const { value, done } = await reader.read(); if (done) break; text += decoder.decode(value, { stream: true }); let end; while ((end = text.indexOf('\n\n')) !== -1) { frames.push(text.slice(0, end)); text = text.slice(end + 2); } } }
+      catch (error) { if (!streamAbort.signal.aborted) throw error; }
+    })();
     const size =
       fixture?.length ??
       (process.env.LARGE_UPLOAD === '1' ? 671811028 : 16777219);
@@ -294,6 +304,11 @@ if (!process.env.LIDAR_ISOLATED_TEST) {
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     await api(`/datasets/${upload.datasetId}`, 'DELETE');
     assert.equal((await api('/datasets')).total, 0);
+    for (let attempt = 0; attempt < 30 && !frames.some(frame => frame.includes('dataset-deleted')); attempt++) await new Promise(resolve => setTimeout(resolve, 100));
+    streamAbort.abort(); await consume;
+    for (const event of ['connected', 'dataset-created', 'dataset-updated', 'dataset-deleted']) assert.ok(frames.some(frame => frame.includes(`event: ${event}`)), `SSE ${event}`);
+    if (process.env.INTEGRATION_PROCESSING === '1' || process.env.REAL_PDAL === '1') assert.ok(frames.some(frame => frame.includes('event: dataset-progress') && frame.includes(upload.datasetId)), 'SSE progress');
+    console.log('SSE connected/create/update/delete/progress verified.');
     console.log(
       `Infrastructure integration passed: migrations, ${size} byte multipart/resume/duplicate complete, queue, list/status/requeue, Range download, idempotent delete. ${process.env.REAL_PDAL === '1' ? 'PDAL real' : 'PDAL disabled/mocked'}.`,
     );

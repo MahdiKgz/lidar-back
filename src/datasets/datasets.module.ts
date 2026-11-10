@@ -1,3 +1,5 @@
+import { DatasetEventsService } from './dataset-events.service.js';
+import { DatasetQueueEvents } from './dataset-queue-events.js';
 import { StorageModule } from '../storage/storage.module.js';
 import { ProccessingModule } from '../proccessing/proccessing.module.js';
 import { Module } from '@nestjs/common';
@@ -13,6 +15,6 @@ import { Dataset } from './entities/dataset.entity.js';
     ProccessingModule,
   ],
   controllers: [DatasetsController],
-  providers: [DatasetsService],
+  providers: [DatasetsService, DatasetEventsService, DatasetQueueEvents],
 })
 export class DatasetsModule {}

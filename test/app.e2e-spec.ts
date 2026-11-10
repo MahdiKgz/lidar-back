@@ -1,3 +1,4 @@
+import { DatasetEventsService } from '../dist/datasets/dataset-events.service.js';
 import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
@@ -21,6 +22,7 @@ describe('Upload HTTP contract and Swagger (mocked services)', () => {
     const module = await Test.createTestingModule({
       controllers: [UploadsController, DatasetsController],
       providers: [
+        { provide: DatasetEventsService, useValue: {} },
         { provide: UploadService, useValue: service },
         {
           provide: DatasetsService,
@@ -60,7 +62,7 @@ describe('Upload HTTP contract and Swagger (mocked services)', () => {
     const response = await request(app.getHttpServer())
       .get('/api/v1/openapi.json')
       .expect(200);
-    expect(Object.keys(response.body.paths)).toHaveLength(11);
+    expect(Object.keys(response.body.paths)).toHaveLength(12);
     expect(
       response.body.components.schemas.InitiateUploadDto.properties.fileSize
         .maximum,
